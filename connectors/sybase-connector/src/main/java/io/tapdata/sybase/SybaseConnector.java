@@ -53,9 +53,11 @@ import io.tapdata.pdk.apis.functions.connector.source.ConnectionConfigWithTables
 import io.tapdata.pdk.apis.functions.connector.target.CreateTableOptions;
 import io.tapdata.sybase.cdc.CdcRoot;
 import io.tapdata.sybase.cdc.dto.analyse.SybaseDataTypeConvert;
+import io.tapdata.sybase.cdc.dto.analyse.filter.ReadFilter;
 import io.tapdata.sybase.cdc.dto.read.CdcPosition;
 import io.tapdata.sybase.cdc.dto.start.CdcStartVariables;
 import io.tapdata.sybase.cdc.dto.start.OverwriteType;
+import io.tapdata.sybase.cdc.dto.start.SybaseFilterConfig;
 import io.tapdata.sybase.cdc.dto.watch.StopLock;
 import io.tapdata.sybase.cdc.service.CdcHandle;
 import io.tapdata.sybase.extend.ConnectionConfig;
@@ -132,8 +134,16 @@ public class SybaseConnector extends CommonDbConnector {
             root = new CdcRoot(unused -> isAlive());
             lock = new StopLock(true);
 
+            //@todo
+            DataMap nodeConfig = tapConnectionContext.getNodeConfig();
+            if(null == nodeConfig) {
+                nodeConfig = new DataMap();
+                tapConnectionContext.setNodeConfig(nodeConfig);
+            }
+            nodeConfig.put("logCdcQuery", tapConnectionContext.getConnectionConfig().get("logCdcQuery"));
+
             connectionConfig = new ConnectionConfig(tapConnectionContext);
-            nodeConfig = new NodeConfig((TapConnectorContext) tapConnectionContext);
+            this.nodeConfig = new NodeConfig((TapConnectorContext) tapConnectionContext);
 
             //维护taskId
             taskId = ConnectorUtil.maintenanceTaskId((TapConnectorContext) tapConnectionContext);
@@ -141,10 +151,10 @@ public class SybaseConnector extends CommonDbConnector {
             //维护cdc工具状态，决定下次启动使用 --resume 还是 --overtime
             overwriteType = ConnectorUtil.maintenanceTableOverType((TapConnectorContext) tapConnectionContext);
 
-            needEncode = nodeConfig.isAutoEncode();
-            encode = needEncode ? Optional.ofNullable(nodeConfig.getEncode()).orElse("cp850") : null;
-            decode = needEncode ? Optional.ofNullable(nodeConfig.getDecode()).orElse("big5") : null;
-            outCode = needEncode ? Optional.ofNullable(nodeConfig.getOutDecode()).orElse("utf-8") : null;
+            needEncode = this.nodeConfig.isAutoEncode();
+            encode = needEncode ? Optional.ofNullable(this.nodeConfig.getEncode()).orElse("cp850") : null;
+            decode = needEncode ? Optional.ofNullable(this.nodeConfig.getDecode()).orElse("big5") : null;
+            outCode = needEncode ? Optional.ofNullable(this.nodeConfig.getOutDecode()).orElse("utf-8") : null;
         }
         started.set(true);
     }
@@ -452,43 +462,6 @@ public class SybaseConnector extends CommonDbConnector {
         }
     }
 
-    private Map<String, Object> filterTimeForMysql0(ResultSet resultSet, Map<String, String> typeAndName, Set<String> dateTypeSet) throws SQLException {
-        Map<String, Object> data = new HashMap<>();
-        for (Map.Entry<String, String> entry : typeAndName.entrySet()) {
-            String metaType = entry.getValue();
-            String metaName = entry.getKey();
-            try {
-                switch (metaType) {
-                    case "TIME":
-                    case "DATE":
-                        data.put(metaName, resultSet.getString(metaName));
-                        break;
-                    case "DATETIME":
-                        data.put(metaName, SybaseDataTypeConvert.objToTimestamp(resultSet.getString(metaName),"DATETIME"));
-                        break;
-                    default:
-                        if (needEncode && (metaType.contains("CHAR")
-                                || metaType.contains("TEXT")
-                                || metaType.contains("SYSNAME"))) {
-                            String string = resultSet.getString(metaName);
-                            data.put(metaName, Utils.convertString(string, encode, decode));
-                        } else if(metaType.contains("DATETIME")) {
-                            data.put(metaName, SybaseDataTypeConvert.objToTimestamp(resultSet.getString(metaName),""));
-                        } else {
-                            Object value = resultSet.getObject(metaName);
-                            if (null == value && dateTypeSet.contains(metaName)) {
-                                value = resultSet.getString(metaName);
-                            }
-                            data.put(metaName, value);
-                        }
-                }
-            } catch (Exception e) {
-                throw new CoreException("Read column value failed, column name: {}, type: {}, data: {}, error: {}", metaName, metaType, data, e.getMessage());
-            }
-        }
-        return data;
-    }
-
     private void batchReadV2(TapConnectorContext tapConnectorContext, TapTable tapTable, Object offsetState, int eventBatchSize, BiConsumer<List<TapEvent>, Object> eventsOffsetConsumer) throws Throwable {
         KVMap<Object> stateMap = tapConnectorContext.getStateMap();
         Object hasSleep = stateMap.get("has_sleep_after_process_start");
@@ -525,8 +498,10 @@ public class SybaseConnector extends CommonDbConnector {
                     if (null == type) continue;
                     typeAndNameFromMetaData.put(metaData.getColumnName(index), type.toUpperCase(Locale.ROOT));
                 }
-                while (isAlive() && resultSet.next()) {
-                    tapEvents[0].add(insertRecordEvent(filterTimeForMysql0(resultSet, typeAndNameFromMetaData, dateTypeSet), tableId).referenceTime(System.currentTimeMillis()));
+                while (root.checkStep() && resultSet.next()) {
+                    tapEvents[0].add(insertRecordEvent(
+                            filterTimeForMysql0(resultSet, typeAndNameFromMetaData, dateTypeSet, needEncode, encode, decode),
+                            tableId).referenceTime(System.currentTimeMillis()));
                     if (tapEvents[0].size() == eventBatchSize) {
                         eventsOffsetConsumer.accept(tapEvents[0], offsetState);
                         tapEvents[0] = new ArrayList<>();
@@ -592,6 +567,15 @@ public class SybaseConnector extends CommonDbConnector {
      * @deprecated
      * */
     private void streamRead(TapConnectorContext tapConnectorContext, List<String> currentTables, Object offset, int batchSize, StreamReadConsumer consumer) throws Throwable {
+        //@todo
+        DataMap node = tapConnectorContext.getNodeConfig();
+        if(null == node) {
+            node = new DataMap();
+            tapConnectorContext.setNodeConfig(node);
+        }
+        node.put("logCdcQuery", tapConnectorContext.getConnectionConfig().get("logCdcQuery"));
+
+
         root.csvFileModifyIndexCache(offset instanceof Map ? (Map<String, Map<String, Integer>>) offset : new HashMap<>());
         tapConnectorContext.getStateMap().put("is_multi_stream_task", true);
         //throw new CoreException("Not support stream read by node, please open Shared-Mining ");
@@ -652,6 +636,9 @@ public class SybaseConnector extends CommonDbConnector {
             }
             if(!(hasMonitor && cdcHandle.reflshCdcTable(tables))) {
                 hasMonitor = true;
+                if (ReadFilter.LOG_CDC_QUERY_READ_SOURCE == nodeConfig.getLogCdcQuery()) {
+                    root.setConnectionConfigWithTables(connectionConfigWithTables);
+                }
                 cdcHandle.startListen(
                         sybasePocPath + ConfigPaths.SYBASE_USE_CSV_DIR,
                         ConfigPaths.YAML_METADATA_NAME,
@@ -693,7 +680,15 @@ public class SybaseConnector extends CommonDbConnector {
      * */
     boolean hasMonitor = false;
     private void multiStreamStart(TapConnectorContext tapConnectorContext, List<ConnectionConfigWithTables> connectionConfigWithTables, Object offset, int batchSize, StreamReadConsumer consumer) {
-        tapConnectorContext.getLog().info("Multi stream start with tables: {}", toJson(connectionConfigWithTables));
+        //@todo
+        DataMap node = tapConnectorContext.getNodeConfig();
+        if(null == node) {
+            node = new DataMap();
+            tapConnectorContext.setNodeConfig(node);
+        }
+        node.put("logCdcQuery", tapConnectorContext.getConnectionConfig().get("logCdcQuery"));
+
+
         Object position = tapConnectorContext.getStateMap().get("cdc_position");
         root.csvFileModifyIndexCache(offset instanceof Map ? (Map<String, Map<String, Integer>>) offset : new HashMap<>());
         root.setContext(tapConnectorContext);
@@ -708,6 +703,7 @@ public class SybaseConnector extends CommonDbConnector {
         if (null == root.getCdcTables() || root.getCdcTables().isEmpty()) {
             root.setCdcTables(tables);
         }
+        tapConnectorContext.getLog().info("Multi stream start with tables: {}", toJson(tables));
         try {
             //Object target = tapConnectorContext.getStateMap().get("timestampToStreamOffsetTarget");
             //if (!(null != target && target instanceof Boolean && (Boolean)target)) {
@@ -740,6 +736,9 @@ public class SybaseConnector extends CommonDbConnector {
             //log.info("cdc monitor path: {}", sybasePocPath + ConfigPaths.SYBASE_USE_CSV_DIR);
             if(!(hasMonitor && cdcHandle.reflshCdcTable(tables))) {
                 hasMonitor = true;
+                if (ReadFilter.LOG_CDC_QUERY_READ_SOURCE == nodeConfig.getLogCdcQuery()) {
+                    root.setConnectionConfigWithTables(connectionConfigWithTables);
+                }
                 cdcHandle.startListen(
                         sybasePocPath + ConfigPaths.SYBASE_USE_CSV_DIR,
                         ConfigPaths.YAML_METADATA_NAME,
@@ -968,7 +967,7 @@ public class SybaseConnector extends CommonDbConnector {
                 root.setCdcTables(monitorTables);
                 //filter the tables which is new table
 
-                Map<String, Map<String, List<String>>> currentTable = Optional.ofNullable(tableFromFilterYaml(path, tapConnectorContext)).orElse(monitorTables);
+                Map<String, Map<String, List<String>>> currentTable = Optional.ofNullable(ConnectorUtil.tableFromFilterYaml(path, tapConnectorContext)).orElse(monitorTables);
                 Map<String, Map<String, List<String>>> appendTables = ConnectorUtil.filterAppendTable(currentTable, groupTableFromConnectionConfigWithTables);
                 //当前任务出先新表需要加入到CDC的监听列表时
                 if (null != appendTables && !appendTables.isEmpty()) {
@@ -1023,14 +1022,48 @@ public class SybaseConnector extends CommonDbConnector {
         }
     }
 
-    public static Map<String, Map<String, List<String>>> tableFromFilterYaml(String pocPath, TapConnectorContext context) {
-        // data/tapdata/tapdata/sybase-poc-temp/101.33.247.59:15001:testdb/sybase-poc/config/sybase2csv/filter_sybasease.yaml
-        String path = String.format("%s%s/sybase-poc/config/sybase2csv/filter_sybasease.yaml", (pocPath.endsWith("/") ? pocPath : pocPath + "/"), ConnectorUtil.getCurrentInstanceHostPortFromConfig(context));
-        try {
-            YamlUtil filterYaml = new YamlUtil(path);
-            return (Map<String, Map<String, List<String>>>) filterYaml.get("allow");
-        } catch (Exception e) {
-            return null;
+
+    public static Map<String, Object> filterTimeForMysql0(
+            ResultSet resultSet,
+            Map<String, String> typeAndName,
+            Set<String> dateTypeSet,
+            boolean needEncode,
+            String encode,
+            String decode
+    ) throws SQLException {
+        Map<String, Object> data = new HashMap<>();
+        for (Map.Entry<String, String> entry : typeAndName.entrySet()) {
+            String metaType = entry.getValue();
+            String metaName = entry.getKey();
+            try {
+                switch (metaType) {
+                    case "TIME":
+                    case "DATE":
+                        data.put(metaName, resultSet.getString(metaName));
+                        break;
+                    case "DATETIME":
+                        data.put(metaName, SybaseDataTypeConvert.objToTimestamp(resultSet.getString(metaName),"DATETIME"));
+                        break;
+                    default:
+                        if (needEncode && (metaType.contains("CHAR")
+                                || metaType.contains("TEXT")
+                                || metaType.contains("SYSNAME"))) {
+                            String string = resultSet.getString(metaName);
+                            data.put(metaName, Utils.convertString(string, encode, decode));
+                        } else if(metaType.contains("DATETIME")) {
+                            data.put(metaName, SybaseDataTypeConvert.objToTimestamp(resultSet.getString(metaName),""));
+                        } else {
+                            Object value = resultSet.getObject(metaName);
+                            if (null == value && dateTypeSet.contains(metaName)) {
+                                value = resultSet.getString(metaName);
+                            }
+                            data.put(metaName, value);
+                        }
+                }
+            } catch (Exception e) {
+                throw new CoreException("Read column value failed, column name: {}, type: {}, data: {}, error: {}", metaName, metaType, data, e.getMessage());
+            }
         }
+        return data;
     }
 }

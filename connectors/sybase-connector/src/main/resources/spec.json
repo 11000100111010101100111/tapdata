@@ -90,7 +90,6 @@
           "x-component": "Input",
           "default": "",
           "apiServerKey": "addtionalString",
-          "x-display": "hidden",
           "x-index": 60
         },
         "timezone": {
@@ -219,6 +218,27 @@
           "default": false,
           "x-display" : "hidden",
           "x-index": 70
+        },
+        "logCdcQuery": {
+          "type": "string",
+          "title": "${log_cdc_query}",
+          "default": 0,
+          "x-decorator": "FormItem",
+          "x-component": "Select",
+          "x-decorator-props": {
+            "tooltip": "${log_cdc_query_tip}"
+          },
+          "x-index": 55,
+          "enum": [
+            {
+              "label": "Read Log",
+              "value": 0
+            },
+            {
+              "label": "Query Source",
+              "value": 1
+            }
+          ]
         }
       }
     },
@@ -301,6 +321,28 @@
               }
             }
           }
+        },
+        "logCdcQuery": {
+          "type": "string",
+          "title": "${log_cdc_query}",
+          "default": 1,
+          "x-decorator": "FormItem",
+          "x-component": "Select",
+          "x-display": "hidden",
+          "x-decorator-props": {
+            "tooltip": "${log_cdc_query_tip}"
+          },
+          "x-index": 9,
+          "enum": [
+            {
+              "label": "Read Log",
+              "value": 0
+            },
+            {
+              "label": "Query Source",
+              "value": 1
+            }
+          ]
         },
         "fetchInterval": {
           "type": "string",
@@ -409,7 +451,9 @@
       "table_sql": "Heartbeat Table Creation SQL",
       "heartbeat_tip": "After enabling CDC heartbeat monitoring, a heartbeat table will be need created on the source side by yourself(replicate_io_cdc_heartbeat)",
       "heart_database": " The database where the heartbeat table is located ",
-      "heart_schema": " The schema where the heartbeat table is located "
+      "heart_schema": " The schema where the heartbeat table is located ",
+      "log_cdc_query": "Log CDC Query",
+      "log_cdc_query_tip": "Query log by read log or query source"
     },
     "zh_CN": {
       "host": "地址",
@@ -433,7 +477,9 @@
       "table_sql": "心跳表建表语句",
       "heartbeat_tip": "开启CDC心跳监听后需要您在源端创建心跳表（replicate_io_cdc_heartbeat）",
       "heart_database": "心跳表所在DataBase",
-      "heart_schema": "心跳表所在Schema"
+      "heart_schema": "心跳表所在Schema",
+      "log_cdc_query": "Log CDC Query",
+      "log_cdc_query_tip": "对象类型数据同步方式有，日志解析或者反查源库"
     },
     "zh_TW": {
       "host": "地址",
@@ -457,7 +503,9 @@
       "table_sql": "心跳錶建錶語句",
       "heartbeat_tip": " 開啟CDC心跳監聽後需要您在源端創建心跳錶（replicate_io_cdc_heartbeat）",
       "heart_database": "心跳錶所在Database",
-      "heart_schema": "心跳錶所在Schema"
+      "heart_schema": "心跳錶所在Schema",
+      "log_cdc_query": "Log CDC Query",
+      "log_cdc_query_tip": "对象类型数据同步方式有，日志解析或者反查源库"
     }
   },
   "dataTypes": {
@@ -487,23 +535,33 @@
       "default": 1,
       "byteRatio": 1
     },
-    "tinytext": {
-      "to": "TapString",
+    "tinytext[($byte)]": {
+      "to": "TapBinary",
       "byte": 255,
       "pkEnablement": false
     },
-    "text": {
-      "to": "TapString",
+    "image[($byte)]": {
+      "to": "TapBinary",
+      "byte": 255,
+      "pkEnablement": false
+    },
+    "unitext[($byte)]": {
+      "to": "TapBinary",
+      "byte": 255,
+      "pkEnablement": false
+    },
+    "text[($byte)]": {
+      "to": "TapBinary",
       "byte": "64k",
       "pkEnablement": false
     },
-    "mediumtext": {
-      "to": "TapString",
+    "mediumtext[($byte)]": {
+      "to": "TapBinary",
       "byte": "16m",
       "pkEnablement": false
     },
-    "longtext": {
-      "to": "TapString",
+    "longtext[($byte)]": {
+      "to": "TapBinary",
       "byte": "4g",
       "pkEnablement": false
     },

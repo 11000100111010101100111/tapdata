@@ -22,68 +22,7 @@ public class TableTypeEntity {
         this.type = type;
         this.name = name;
         this.length = length;
-        String typeUppercase = type.toUpperCase();
-        switch (typeUppercase) {
-            case "DATE":
-                this.typeNum = Type.DATE;
-                break;
-            case "TIME":
-                this.typeNum = Type.TIME;
-                break;
-            case "BIGTIME":
-                this.typeNum = Type.BIG_TIME;
-                break;
-            case "INT":
-            case "TINYINT":
-                this.typeNum = Type.INT;
-                break;
-            case "SMALLINT":
-                this.typeNum = Type.SMALLINT;
-                break;
-            case "BIGINT":
-                this.typeNum = Type.BIGINT;
-                break;
-            case "DOUBLE":
-                this.typeNum = Type.DOUBLE;
-                break;
-            case "SMALLMONEY":
-            case "MONEY":
-            case "REAL":
-            case "BIT":
-                this.typeNum = Type.BIT;
-                break;
-            case "IMAGE":
-                this.typeNum = Type.IMAGE;
-                break;
-            default:
-                if (type.contains("CHAR")
-                        || type.contains("TEXT")
-                        || type.contains("SYSNAME")) {
-                    this.typeNum = Type.CHAR;
-                } else if (type.contains("SMALLDATETIME")) {
-                    this.typeNum = Type.DATETIME;
-                } else if (type.contains("DATETIME")
-                        //|| "SMALLDATETIME".equals(type)
-                        //|| "DATETIME".equals(type)
-                        //|| "BIGDATETIME".equals(type)
-                        || "TIMESTAMP".equals(type)) {
-                    this.typeNum = Type.DATETIME;
-                } else if (type.startsWith("FLOAT")) {
-                    this.typeNum = Type.FLOAT;
-                } else if (type.startsWith("DECIMAL")) {
-                    this.typeNum = Type.DECIMAL;
-                } else if (type.startsWith("NUMERIC")) {
-                    this.typeNum = Type.NUMERIC;
-                } else if (type.startsWith("VARBINARY")) {
-                    this.typeNum = Type.BINARY;
-                } else if (type.contains("BINARY")) {
-                    this.typeNum = Type.BINARY;
-                } else if (type.contains("IMAGE")) {
-                    this.typeNum = Type.IMAGE;
-                } else {
-                    this.typeNum = Type.FAIL;
-                }
-        }
+        this.typeNum = Type.type(type);
     }
 
     public String getType() {
@@ -133,5 +72,61 @@ public class TableTypeEntity {
         public static final int NUMERIC = 14;
         public static final int BINARY = 15;
         public static final int FAIL = -1;
+
+        public static int type(String typeName) {
+            String type = typeName.toUpperCase();
+            switch (type) {
+                case "DATE":
+                    return Type.DATE;
+                case "TIME":
+                    return Type.TIME;
+                case "BIGTIME":
+                    return Type.BIG_TIME;
+                case "INT":
+                case "TINYINT":
+                    return Type.INT;
+                case "SMALLINT":
+                    return Type.SMALLINT;
+                case "BIGINT":
+                    return Type.BIGINT;
+                case "DOUBLE":
+                    return Type.DOUBLE;
+                case "SMALLMONEY":
+                case "MONEY":
+                case "REAL":
+                case "BIT":
+                    return Type.BIT;
+                case "IMAGE":
+                    return Type.IMAGE;
+                default:
+                    if (type.contains("CHAR") || type.contains("SYSNAME")) {
+                        return Type.CHAR;
+                    } else if (type.contains("TEXT")) {
+                        return Type.TEXT;
+                    } else if (type.contains("SMALLDATETIME")) {
+                        return Type.DATETIME;
+                    } else if (type.contains("DATETIME")
+                            //|| "SMALLDATETIME".equals(type)
+                            //|| "DATETIME".equals(type)
+                            //|| "BIGDATETIME".equals(type)
+                            || "TIMESTAMP".equals(type)) {
+                        return Type.DATETIME;
+                    } else if (type.startsWith("FLOAT")) {
+                        return Type.FLOAT;
+                    } else if (type.startsWith("DECIMAL")) {
+                        return Type.DECIMAL;
+                    } else if (type.startsWith("NUMERIC")) {
+                        return Type.NUMERIC;
+                    } else if (type.startsWith("VARBINARY")) {
+                        return Type.BINARY;
+                    } else if (type.contains("BINARY")) {
+                        return Type.BINARY;
+                    } else if (type.contains("IMAGE")) {
+                        return Type.IMAGE;
+                    } else {
+                        return Type.FAIL;
+                    }
+            }
+        }
     }
 }

@@ -2,6 +2,7 @@ package io.tapdata.sybase.extend;
 
 import io.tapdata.entity.utils.DataMap;
 import io.tapdata.pdk.apis.context.TapConnectorContext;
+import io.tapdata.sybase.cdc.dto.analyse.filter.ReadFilter;
 
 import java.util.Optional;
 
@@ -21,26 +22,32 @@ public class NodeConfig {
     private String hbDatabase;
     private String hbSchema;
 
+    private int logCdcQuery;
+
     public NodeConfig(TapConnectorContext context) {
         this(null == context || null == context.getNodeConfig() ? new DataMap() : context.getNodeConfig());
     }
 
     public NodeConfig(DataMap nodeConfig) {
         if (null == nodeConfig) nodeConfig = new DataMap();
-        this.fetchInterval = Optional.ofNullable(nodeConfig.getInteger("fetchInterval")).orElse(3);
+        this.fetchInterval = Optional.ofNullable(nodeConfig.getInteger("fetchInterval")).orElse(1);
         if (this.fetchInterval < 1) {
             this.fetchInterval = 1;
         }
         this.outDecode = Optional.ofNullable(nodeConfig.getString("outDecode")).orElse("utf-8");
         encode = Optional.ofNullable(nodeConfig.getString("encode")).orElse("cp850");
-        decode = Optional.ofNullable(nodeConfig.getString("decode")).orElse("big5");
-        autoEncode = (boolean)Optional.ofNullable(nodeConfig.get("autoEncode")).orElse(false);
-        cdcCacheTime = Optional.ofNullable(nodeConfig.getInteger("cdcCacheTime")).orElse(10);
+        decode = Optional.ofNullable(nodeConfig.getString("decode")).orElse("big5-ha");
+        autoEncode = (boolean)Optional.ofNullable(nodeConfig.get("autoEncode")).orElse(true);
+        cdcCacheTime = Optional.ofNullable(nodeConfig.getInteger("cdcCacheTime")).orElse(3);
         heartbeat = (Boolean) Optional.ofNullable(nodeConfig.get("heartbeat")).orElse(false);
         hbDatabase = Optional.ofNullable(nodeConfig.getString("hbDatabase")).orElse("");
         hbSchema = Optional.ofNullable(nodeConfig.getString("hbSchema")).orElse("");
         if (cdcCacheTime < 1) {
             cdcCacheTime = 2;
+        }
+        logCdcQuery = Optional.ofNullable(nodeConfig.getInteger("logCdcQuery")).orElse(ReadFilter.LOG_CDC_QUERY_READ_LOG);
+        if (logCdcQuery != ReadFilter.LOG_CDC_QUERY_READ_LOG && logCdcQuery != ReadFilter.LOG_CDC_QUERY_READ_SOURCE) {
+            logCdcQuery = ReadFilter.LOG_CDC_QUERY_READ_LOG;
         }
     }
 
@@ -117,5 +124,13 @@ public class NodeConfig {
 
     public void setHbSchema(String hbSchema) {
         this.hbSchema = hbSchema;
+    }
+
+    public int getLogCdcQuery() {
+        return logCdcQuery;
+    }
+
+    public void setLogCdcQuery(int logCdcQuery) {
+        this.logCdcQuery = logCdcQuery;
     }
 }

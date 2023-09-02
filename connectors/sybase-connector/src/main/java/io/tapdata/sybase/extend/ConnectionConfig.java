@@ -4,6 +4,7 @@ import io.tapdata.entity.error.CoreException;
 import io.tapdata.entity.utils.DataMap;
 import io.tapdata.pdk.apis.context.TapConnectionContext;
 import io.tapdata.pdk.apis.context.TapConnectorContext;
+import io.tapdata.sybase.cdc.dto.analyse.filter.ReadFilter;
 
 import java.util.Map;
 import java.util.Optional;
@@ -22,6 +23,7 @@ public class ConnectionConfig {
     private String schema;
     private String addtionalString;
     private String timezone;
+    private int logCdcQuery;
 
     public ConnectionConfig(TapConnectionContext context) {
         if (null == context || null == context.getConnectionConfig()) {
@@ -43,6 +45,11 @@ public class ConnectionConfig {
         schema = config.getString("schema");
         addtionalString = config.getString("addtionalString");
         timezone = config.getString("timezone");
+
+        logCdcQuery = Optional.ofNullable(config.getInteger("logCdcQuery")).orElse(ReadFilter.LOG_CDC_QUERY_READ_LOG);
+        if (logCdcQuery != ReadFilter.LOG_CDC_QUERY_READ_LOG && logCdcQuery != ReadFilter.LOG_CDC_QUERY_READ_SOURCE) {
+            logCdcQuery = ReadFilter.LOG_CDC_QUERY_READ_LOG;
+        }
     }
 
 
@@ -112,5 +119,13 @@ public class ConnectionConfig {
 
     public void setPort(Integer port) {
         this.port = port;
+    }
+
+    public int getLogCdcQuery() {
+        return logCdcQuery;
+    }
+
+    public void setLogCdcQuery(int logCdcQuery) {
+        this.logCdcQuery = logCdcQuery;
     }
 }

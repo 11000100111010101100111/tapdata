@@ -4,6 +4,10 @@ import io.tapdata.entity.error.CoreException;
 import io.tapdata.entity.event.TapEvent;
 import io.tapdata.entity.event.dml.TapRecordEvent;
 import io.tapdata.entity.logger.Log;
+import io.tapdata.entity.schema.TapTable;
+import io.tapdata.entity.utils.cache.Entry;
+import io.tapdata.entity.utils.cache.Iterator;
+import io.tapdata.entity.utils.cache.KVReadOnlyMap;
 import io.tapdata.pdk.apis.consumer.StreamReadConsumer;
 import io.tapdata.pdk.apis.context.TapConnectorContext;
 import io.tapdata.sybase.SybaseConnector;
@@ -11,11 +15,14 @@ import io.tapdata.sybase.cdc.CdcRoot;
 import io.tapdata.sybase.cdc.CdcStep;
 import io.tapdata.sybase.cdc.dto.analyse.AnalyseRecord;
 import io.tapdata.sybase.cdc.dto.analyse.AnalyseTapEventFromCsvString;
+import io.tapdata.sybase.cdc.dto.analyse.CsvAnalyseFilter;
 import io.tapdata.sybase.cdc.dto.analyse.csv.ReadCSV;
 import io.tapdata.sybase.cdc.dto.analyse.csv.ReadCSVOfBigFile;
 import io.tapdata.sybase.cdc.dto.analyse.csv.ReadCSVQuickly;
+import io.tapdata.sybase.cdc.dto.analyse.filter.ReadFilter;
 import io.tapdata.sybase.cdc.dto.read.CdcPosition;
 import io.tapdata.sybase.cdc.dto.read.TableTypeEntity;
+import io.tapdata.sybase.cdc.dto.start.SybaseFilterConfig;
 import io.tapdata.sybase.cdc.dto.watch.FileListener;
 import io.tapdata.sybase.cdc.dto.watch.FileMonitor;
 import io.tapdata.sybase.cdc.dto.watch.StopLock;
@@ -67,6 +74,10 @@ public class ListenFile implements CdcStep<CdcRoot> {
     private final ScheduledExecutorService scheduledExecutorServiceCheckFile = Executors.newSingleThreadScheduledExecutor();
     private final ScheduledExecutorService scheduledExecutorService;
     private final Object readFileLock = new Object();
+    Map<String, Set<String>> blockFieldsMap;
+    Map<String, TapTable> tapTableMap = new HashMap<>();
+
+    private final ReadFilter readFilter;
 
     protected ListenFile(CdcRoot root,
                          String monitorPath,
@@ -89,14 +100,45 @@ public class ListenFile implements CdcStep<CdcRoot> {
         this.tables = tables;
         root.getContext().getLog().info("init with monitor table: {}", tables);
         analyseRecord = new AnalyseTapEventFromCsvString();
-        this.batchSize = batchSize;
+        this.batchSize = batchSize < 200 || batchSize > 500 ? 200 : batchSize;
         this.schemaConfigPath = root.getSybasePocPath() + ConfigPaths.SCHEMA_CONFIG_PATH;
-        this.config = new ConnectionConfig(root.getContext());
-        this.nodeConfig = new NodeConfig(root.getContext());
+        this.config = root.getConnectionConfig();
+        this.nodeConfig = root.getNodeConfig();
         readCSVOfBigFile.setLog(root.getContext().getLog());
 
         monitorFilePathQueues = new ConcurrentLinkedQueue<>();
         scheduledExecutorService = Executors.newSingleThreadScheduledExecutor();
+        if (ReadFilter.LOG_CDC_QUERY_READ_SOURCE == nodeConfig.getLogCdcQuery()) {
+            blockFieldsMap = Optional.ofNullable(root.getExistsBlockFieldsMap()).orElse(ConnectorUtil.tableBlockFieldsFromFilterYaml(root.getSybasePocPath(), root.getContext()));
+            int times = 3;
+            while (root.getIsAlive().test(null)){
+                try {
+                    getTapTableMap();
+                    break;
+                } catch (Throwable e){
+                    if (times > 0) {
+                        times--;
+                        try {
+                            Thread.sleep(500);
+                        } catch (Exception ignore){}
+                    } else {
+                        throw new CoreException("Can not get tap table from context when init cdc mointor, msg: {}", e.getMessage());
+                    }
+                }
+            }
+        } else {
+            blockFieldsMap = new HashMap<>();
+        }
+        readFilter = ReadFilter.stage(Optional.ofNullable(nodeConfig.getLogCdcQuery()).orElse(ReadFilter.LOG_CDC_QUERY_READ_LOG), root);
+    }
+
+    private void getTapTableMap() throws Throwable {
+        KVReadOnlyMap<TapTable> tableMap = root.getContext().getTableMap();
+        Iterator<Entry<TapTable>> iterator = tableMap.iterator();
+        while (iterator.hasNext()) {
+            Entry<TapTable> next = iterator.next();
+            tapTableMap.put(next.getKey(), next.getValue());
+        }
     }
 
     @Override
@@ -304,6 +346,7 @@ public class ListenFile implements CdcStep<CdcRoot> {
             final String database = split[0];
             final String schema = split[1];
             final String tableName = split[2];
+            final String fullTableName = fullTableName(database, schema, tableName);
 
             CdcPosition position = analyseCsvFile.getPosition();
             long cdcStartTime = position.getCdcStartTime();
@@ -364,15 +407,18 @@ public class ListenFile implements CdcStep<CdcRoot> {
                 options.add(schema);
                 options.add(tableName);
                 AtomicInteger count = new AtomicInteger(0);
+                final Set<String> blockFields = blockFieldsMap.get(fullTableName);
+                final TapTable tableInfo = tapTableMap.get(fullTableName);
                 try {
                     analyseCsvFile.analyse(file.getAbsolutePath(), tapTable, (compile, firstIndex, lastIndex) -> {
                         LinkedHashMap<String, TableTypeEntity> tableItem = tapTableAto.get();
                         CdcPosition.CSVOffset offset = csvOffsetAto.get();
                         int lineItem = offset.getLine();
                         for (String[] list : compile) {
+                            if (!root.getIsAlive().test(null)) break;
                             TapEvent recordEvent;
                             try {
-                                recordEvent = analyseRecord.analyse(list, tableItem, tableName, config, nodeConfig);
+                                recordEvent = analyseRecord.analyse(list, tableItem, tableName, config, nodeConfig, null);
                             } catch (Exception e) {
                                 root.getContext().getLog().warn("An cdc event failed to accept in {} of {}, error csv format, csv line: {}, msg: {}", tableName, absolutePath, list, e.getMessage());
                                 continue;
@@ -388,7 +434,7 @@ public class ListenFile implements CdcStep<CdcRoot> {
                                 count.addAndGet(1);
                                 if (events[0].size() == batchSize) {
                                     offset.setOver(false);
-                                    cdcConsumer.accept(events[0], root.setCsvFileModifyIndexByCsvFileName(
+                                    cdcConsumer.accept(readFilter.readFilter(events[0], tableInfo, blockFields, fullTableName), root.setCsvFileModifyIndexByCsvFileName(
                                             csvFileName,
                                             CdcPosition.PositionOffset.fixFileNameByFilePathWithoutSuf(csvFileName),
                                             lineItem));
@@ -400,7 +446,7 @@ public class ListenFile implements CdcStep<CdcRoot> {
                 } finally {
                     if (!events[0].isEmpty()) {
                         csvOffset.setOver(true);
-                        cdcConsumer.accept(events[0], root.setCsvFileModifyIndexByCsvFileName(
+                        cdcConsumer.accept(readFilter.readFilter(events[0], tableInfo, blockFields, fullTableName), root.setCsvFileModifyIndexByCsvFileName(
                                 csvFileName,
                                 CdcPosition.PositionOffset.fixFileNameByFilePathWithoutSuf(csvFileName),
                                 csvOffset.getLine()));
@@ -446,7 +492,7 @@ public class ListenFile implements CdcStep<CdcRoot> {
 
         public synchronized void readFile() {
             if (hasHandelInit.get()) {
-                while (!monitorFilePathQueues.isEmpty()) {
+                while (root.getIsAlive().test(null) && !monitorFilePathQueues.isEmpty()) {
                     File file = new File(monitorFilePathQueues.poll());
                     synchronized (readFileLock) {
                         monitor(file, tableMap);
@@ -518,17 +564,20 @@ public class ListenFile implements CdcStep<CdcRoot> {
             if (tables.isEmpty()) return;
             //遍历monitorPath 所有子目录下的
             for (Map.Entry<String, Map<String, List<String>>> databaseEntry : tables.entrySet()) {
+                if (!root.getIsAlive().test(null)) break;
                 String database = databaseEntry.getKey();
                 Map<String, List<String>> schemaMap = databaseEntry.getValue();
                 if (null == database || null == schemaMap || schemaMap.isEmpty())  continue;
                 final String tableSpace = monitorPath + "/" + database + "/";
                 Set<Map.Entry<String, List<String>>> schemaEntry = schemaMap.entrySet();
                 for (Map.Entry<String, List<String>> schemaMaps : schemaEntry) {
+                    if (!root.getIsAlive().test(null)) break;
                     String schema = schemaMaps.getKey();
                     List<String> tablesMaps = schemaMaps.getValue();
                     if (null == schema || null == tablesMaps || tablesMaps.isEmpty()) continue;
                     final String tempDir = tableSpace + schema + "/";
                     for (String table : tablesMaps) {
+                        if (!root.getIsAlive().test(null)) break;
                         if (null == table || "".equals(table.trim())) continue;
                         final String tempPath = tempDir + table + "/object_metadata.yaml";
                         File metadataYamlFile = new File(tempPath);
@@ -555,6 +604,7 @@ public class ListenFile implements CdcStep<CdcRoot> {
                 YamlUtil objectMetadataYaml = new YamlUtil(file.getAbsolutePath());
                 List<Map<String, Object>> csvFileOffset = (List<Map<String, Object>>) objectMetadataYaml.get("file-row-count");
                 csvFileOffset.stream().filter(Objects::nonNull).forEach(offset -> {
+                    if (!root.getIsAlive().test(null)) return;
                     String csvFilePath = String.valueOf(offset.get("file-name"));
                     String absolutePath = file.getParentFile().getAbsolutePath();
                     File csvFile = new File(FilenameUtils.concat(absolutePath, csvFilePath));

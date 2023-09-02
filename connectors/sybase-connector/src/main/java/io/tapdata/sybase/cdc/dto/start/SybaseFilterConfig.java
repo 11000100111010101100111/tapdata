@@ -1,9 +1,8 @@
 package io.tapdata.sybase.cdc.dto.start;
 
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import io.tapdata.sybase.cdc.dto.read.TableTypeEntity;
+
+import java.util.*;
 
 /**
  * @author GavinXiao
@@ -58,5 +57,28 @@ public class SybaseFilterConfig implements ConfigEntity {
         map.put("types", types);
         map.put("allow", allow);
         return map;
+    }
+
+    public Map<String, List<String>> blockFieldName(List<String> needBlockFieldName) {
+        Map<String, List<String>> hashMap = new HashMap<>();
+        hashMap.put("block", Optional.ofNullable(needBlockFieldName).orElse(new ArrayList<String>()));
+        return hashMap;
+    }
+
+    public Map<String, List<String>> ignoreColumns(List<String> needBlockFieldName) {
+        List<String> timestamp = Optional.ofNullable(needBlockFieldName).orElse(new ArrayList<String>());
+        timestamp.add("timestamp");
+        return blockFieldName(timestamp);
+    }
+
+    public boolean isBolField (String dataTypeName) {
+        switch (TableTypeEntity.Type.type(dataTypeName)) {
+            case TableTypeEntity.Type.BINARY:
+            case TableTypeEntity.Type.TEXT:
+            case TableTypeEntity.Type.IMAGE:
+                return true;
+            default:
+                return false;
+        }
     }
 }

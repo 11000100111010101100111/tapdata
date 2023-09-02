@@ -8,5 +8,5 @@ import java.util.Map;
  * @create 2023/8/9 15:22
  **/
 public interface CsvAnalyseFilter {
-    boolean filter(Map<String, Object> cdcInfo);
+    boolean filter(Map<String, Object> before, Map<String, Object> after, Map<String, Object> cdcInfo);
 }

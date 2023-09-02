@@ -30,7 +30,7 @@ public class AnalyseTapEventFromCsvString implements AnalyseRecord<String[], Tap
      *                 }
      */
     @Override
-    public TapRecordEvent analyse(String[] record, LinkedHashMap<String, TableTypeEntity> tapTable, String tableId, ConnectionConfig config, NodeConfig nodeConfig) {
+    public TapRecordEvent analyse(String[] record, LinkedHashMap<String, TableTypeEntity> tapTable, String tableId, ConnectionConfig config, NodeConfig nodeConfig, CsvAnalyseFilter filter) {
         // 6,NULL,1,
         // 2023-07-13 20:43:05.0,NULL,1,
         // "sfas"",""dsafas",NULL,1,
@@ -91,6 +91,10 @@ public class AnalyseTapEventFromCsvString implements AnalyseRecord<String[], Tap
                 before.put(fieldName, DEFAULT_CONVERT.convert(beforeValue, sybaseType, typeEntity.getTypeNum(), config, nodeConfig));
             }
             index++;
+        }
+
+        if (null != filter) {
+            filter.filter(before, after, cdcInfo);
         }
 
         Object timestamp = cdcInfo.get("timestamp");

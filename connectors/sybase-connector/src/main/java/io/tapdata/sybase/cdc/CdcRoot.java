@@ -1,18 +1,18 @@
 package io.tapdata.sybase.cdc;
 
 import io.tapdata.pdk.apis.context.TapConnectorContext;
+import io.tapdata.pdk.apis.functions.connector.source.ConnectionConfigWithTables;
 import io.tapdata.sybase.cdc.dto.read.CdcPosition;
 import io.tapdata.sybase.cdc.dto.start.CdcStartVariables;
 import io.tapdata.sybase.cdc.service.ListenFile;
+import io.tapdata.sybase.extend.ConnectionConfig;
+import io.tapdata.sybase.extend.NodeConfig;
+import io.tapdata.sybase.extend.SybaseContext;
+import io.tapdata.sybase.util.ConfigPaths;
 import io.tapdata.sybase.util.ConnectorUtil;
 
 import java.io.File;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.function.Predicate;
 
 /**
@@ -31,7 +31,11 @@ public class CdcRoot {
     private String cliPath;
     private Predicate<Void> isAlive;
     private Map<String, Map<String, List<String>>> containsTimestampFieldTables;
-    Map<String, Map<String, Integer>> csvFileModifyIndexCache;
+    private Map<String, Map<String, Integer>> csvFileModifyIndexCache;
+    private NodeConfig nodeConfig;
+    private ConnectionConfig connectionConfig;
+    private Map<String, Set<String>> existsBlockFieldsMap;
+    private List<ConnectionConfigWithTables> connectionConfigWithTables;
 
 
     public CdcRoot(Predicate<Void> isAlive) {
@@ -116,7 +120,10 @@ public class CdcRoot {
     }
 
     public void setContext(TapConnectorContext context) {
+        if (null == context || null != this.context) return;
         this.context = context;
+        nodeConfig = new NodeConfig(context);
+        connectionConfig = new ConnectionConfig(context);
     }
 
     public String getSybasePocPath() {
@@ -193,5 +200,69 @@ public class CdcRoot {
 
     public void setContainsTimestampFieldTables(Map<String, Map<String, List<String>>> containsTimestampFieldTables) {
         this.containsTimestampFieldTables = containsTimestampFieldTables;
+    }
+
+    public NodeConfig getNodeConfig() {
+        return nodeConfig = Optional.ofNullable(nodeConfig).orElse(new NodeConfig(context));
+    }
+
+    public void setNodeConfig(NodeConfig nodeConfig) {
+        this.nodeConfig = nodeConfig;
+    }
+
+    public ConnectionConfig getConnectionConfig() {
+        return connectionConfig = Optional.ofNullable(connectionConfig).orElse(new ConnectionConfig(context));
+    }
+
+    public void setConnectionConfig(ConnectionConfig connectionConfig) {
+        this.connectionConfig = connectionConfig;
+    }
+
+    /**
+     * @return if value is null, mean cdc process has started before this task running;
+     *          if value is empty, mean not any blockFields
+     * */
+    public Map<String, Set<String>> getExistsBlockFieldsMap() {
+        return existsBlockFieldsMap;
+    }
+
+    /**
+     * @param fullTableName match regex is {databaseName}.{schemaName}.{tableName}
+     * */
+    public Set<String> getExistsBlockFields(String fullTableName) {
+        if (null == existsBlockFieldsMap || existsBlockFieldsMap.isEmpty()){
+            return null;
+        }
+        return existsBlockFieldsMap.get(fullTableName);
+    }
+
+    /**
+     * @deprecated
+     * @param fullTableName match regex is {databaseName}.{schemaName}.{tableName}
+     * */
+    public void addExistsBlockField(String fullTableName, String fieldName) {
+        if (null == existsBlockFieldsMap){
+            existsBlockFieldsMap = new HashMap<>();
+        }
+        Set<String> blockFields = existsBlockFieldsMap.computeIfAbsent(fullTableName, key -> new HashSet<>());
+        blockFields.add(fieldName);
+    }
+    /**
+     *
+     * @param fullTableName match regex is {databaseName}.{schemaName}.{tableName}
+     * */
+    public void addExistsBlockFields(String fullTableName, Set<String> fieldName) {
+        if (null == existsBlockFieldsMap){
+            existsBlockFieldsMap = new HashMap<>();
+        }
+        existsBlockFieldsMap.put(fullTableName, fieldName);
+    }
+
+    public List<ConnectionConfigWithTables> getConnectionConfigWithTables() {
+        return connectionConfigWithTables;
+    }
+
+    public void setConnectionConfigWithTables(List<ConnectionConfigWithTables> connectionConfigWithTables) {
+        this.connectionConfigWithTables = connectionConfigWithTables;
     }
 }

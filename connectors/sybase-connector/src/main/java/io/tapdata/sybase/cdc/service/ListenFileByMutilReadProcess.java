@@ -382,7 +382,7 @@ public class ListenFileByMutilReadProcess implements CdcStep<CdcRoot> {
                         for (String[] list : compile) {
                             TapEvent recordEvent;
                             try {
-                                recordEvent = analyseRecord.analyse(list, tableItem, tableName, config, nodeConfig);
+                                recordEvent = analyseRecord.analyse(list, tableItem, tableName, config, nodeConfig, null);
                             } catch (Exception e) {
                                 root.getContext().getLog().warn("An cdc event failed to accept in {} of {}, error csv format, csv line: {}, msg: {}", tableName, absolutePath, list, e.getMessage());
                                 continue;

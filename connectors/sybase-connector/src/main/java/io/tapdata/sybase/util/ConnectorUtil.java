@@ -493,20 +493,18 @@ public class ConnectorUtil {
 //    public static final Map<String, List<String>> unIgnoreColumns = new HashMap<String, List<String>>() {{
 //        put("block", new ArrayList<String>());
 //    }};
-
-    public static Map<String, List<String>> unIgnoreColumns() {
-        Map<String, List<String>> hashMap = new HashMap<>();
-        hashMap.put("block", new ArrayList<>());
-        return hashMap;
-    }
-
-    public static Map<String, List<String>> ignoreColumns() {
-        Map<String, List<String>> hashMap = new HashMap<>();
-        List<String> timestamp = new ArrayList<>();
-        timestamp.add("timestamp");
-        hashMap.put("block", timestamp);
-        return hashMap;
-    }
+//
+//    public static Map<String, List<String>> blockFieldName(List<String> needBlockFieldName) {
+//        Map<String, List<String>> hashMap = new HashMap<>();
+//        hashMap.put("block", Optional.ofNullable(needBlockFieldName).orElse(new ArrayList<String>()));
+//        return hashMap;
+//    }
+//
+//    public static Map<String, List<String>> ignoreColumns(List<String> needBlockFieldName) {
+//        List<String> timestamp = Optional.ofNullable(needBlockFieldName).orElse(new ArrayList<String>());
+//        timestamp.add("timestamp");
+//        return blockFieldName(timestamp);
+//    }
 
     private static final String[] killShellCmd = new String[]{"/bin/sh", "-c", "ps -ef|grep sybase-poc/replicant-cli |grep sybase-poc-temp/%s"};
     public static String[] getKillShellCmd (TapConnectorContext tapConnectionContext){
@@ -776,5 +774,65 @@ public class ConnectorUtil {
         } catch (Exception e) {
             log.warn("Can not delete file: {}, msg; {}", file.getAbsolutePath(), e.getMessage());
         }
+    }
+
+    public static Map<String, Map<String, List<String>>> tableFromFilterYaml(String pocPath, TapConnectorContext context) {
+        Map<String, Map<String, List<String>>> tables = new HashMap<>();
+        Optional.ofNullable(tableConfigFromFilterYaml(pocPath, context)).ifPresent(tabList -> {
+            tabList.stream().filter(Objects::nonNull).forEach(tab -> {
+                String database = String.valueOf(tab.get("catalog"));
+                String schema = String.valueOf(tab.get("schema"));
+                Map<String, Object> tableInfo = (Map<String, Object>)tab.get(SybaseFilterConfig.configKey);
+                Map<String, List<String>> databaseMap = tables.computeIfAbsent(database, key -> new HashMap<>());
+                if (null != tableInfo && !tableInfo.isEmpty()) {
+                    List<String> tableNames = databaseMap.computeIfAbsent(schema, key -> new ArrayList<>());
+                    tableInfo.keySet().stream()
+                            .filter(name -> Objects.nonNull(name) && ! tableNames.contains(name))
+                            .forEach(tableNames::add);
+                }
+            });
+        });
+        return tables;
+    }
+
+    public static List<Map<String, Object>> tableConfigFromFilterYaml(String pocPath, TapConnectorContext context) {
+        // data/tapdata/tapdata/sybase-poc-temp/101.33.247.59:15001:testdb/sybase-poc/config/sybase2csv/filter_sybasease.yaml
+        String path = String.format("%s%s/sybase-poc/config/sybase2csv/filter_sybasease.yaml", (pocPath.endsWith("/") ? pocPath : pocPath + "/"), ConnectorUtil.getCurrentInstanceHostPortFromConfig(context));
+        try {
+            YamlUtil filterYaml = new YamlUtil(path);
+            return (List<Map<String, Object>>) filterYaml.get(SybaseFilterConfig.configKey);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    public static Map<String, Set<String>> tableBlockFieldsFromFilterYaml(String pocPath, TapConnectorContext context) {
+        Map<String, Set<String>> tables = new HashMap<>();
+        Optional.ofNullable(tableConfigFromFilterYaml(pocPath, context)).ifPresent(tabList -> {
+            tabList.stream().filter(Objects::nonNull).forEach(tab -> {
+                String database = String.valueOf(tab.get("catalog"));
+                String schema = String.valueOf(tab.get("schema"));
+                Map<String, Object> tableInfo = (Map<String, Object>)tab.get(SybaseFilterConfig.configKey);
+                if (null != tableInfo && !tableInfo.isEmpty()) {
+                    tableInfo.keySet().stream()
+                        .filter(Objects::nonNull)
+                        .forEach(name -> {
+                            String fullTableName = String.format("%s.%s.%s", database, schema, name);
+                            Object infoList = tableInfo.get(name);
+                            if (infoList instanceof Map) {
+                                Map<String, Object> infoMap = (Map<String, Object>) infoList;
+                                Optional.ofNullable(infoMap.get("block")).ifPresent(block -> {
+                                    if(block instanceof Collection && !((Collection<String>)block).isEmpty()) {
+                                        ((Collection<String>)block).stream()
+                                            .filter(fieldName -> Objects.nonNull(fieldName) && !"timestamp".equals(fieldName))
+                                            .forEach(fieldName -> tables.computeIfAbsent(fullTableName, key -> new HashSet<>()).add(fieldName));
+                                    }
+                                });
+                            }
+                        });
+                }
+            });
+        });
+        return tables;
     }
 }
