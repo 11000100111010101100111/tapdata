@@ -21,4 +21,11 @@ public interface ReadCSV {
     public void read(String csvPath, int offset, CdcAccepter accepter);
 
     public void read(String csvPath, int offset, List<SpecialField> specialFields, CdcAccepter accepter);
+
+    public default int getCdcBatchSize() {
+        return CDC_BATCH_SIZE;
+    }
+
+    public default void setCdcBatchSize(int size) {
+    }
 }

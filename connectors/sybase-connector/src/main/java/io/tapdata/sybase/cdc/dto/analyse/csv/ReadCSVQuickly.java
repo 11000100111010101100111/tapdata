@@ -48,7 +48,7 @@ public class ReadCSVQuickly implements ReadCSV {
                     lines.add(strArr);
                     index++;
                     int size = lines.size();
-                    if (size >= CDC_BATCH_SIZE) {
+                    if (size >= getCdcBatchSize()) {
                         consumer.accept(lines, index - size + 1, index);
                         lines = new ArrayList<>();
                     }
@@ -66,5 +66,13 @@ public class ReadCSVQuickly implements ReadCSV {
     @Override
     public void read(String csvPath, int offset, List<SpecialField> specialFields, CdcAccepter accepter) {
 
+    }
+
+    int batchSize;
+    public int getCdcBatchSize() {
+        return batchSize;
+    }
+    public void setCdcBatchSize(int size) {
+        batchSize = size;
     }
 }

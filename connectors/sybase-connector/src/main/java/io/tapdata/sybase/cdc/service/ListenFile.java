@@ -1,5 +1,6 @@
 package io.tapdata.sybase.cdc.service;
 
+import cn.hutool.core.text.csv.CsvReader;
 import io.tapdata.entity.error.CoreException;
 import io.tapdata.entity.event.TapEvent;
 import io.tapdata.entity.event.dml.TapRecordEvent;
@@ -112,6 +113,7 @@ public class ListenFile implements CdcStep<CdcRoot> {
         if (ReadFilter.LOG_CDC_QUERY_READ_SOURCE == nodeConfig.getLogCdcQuery()) {
             this.batchSize = batchSize < 200 || batchSize > 1000 ? 1000 : batchSize;
             this.readcsvDelay = 3;
+            this.readCSVOfBigFile.setCdcBatchSize(ReadCSV.MAX_LINE_EVERY_CSV_FILE);
             blockFieldsMap = Optional.ofNullable(root.getExistsBlockFieldsMap()).orElse(ConnectorUtil.tableBlockFieldsFromFilterYaml(root.getSybasePocPath(), root.getContext()));
             int times = 3;
             while (root.getIsAlive().test(null)){
@@ -131,6 +133,7 @@ public class ListenFile implements CdcStep<CdcRoot> {
             }
         } else {
             this.readcsvDelay = 1;
+            this.readCSVOfBigFile.setCdcBatchSize(ReadCSV.CDC_BATCH_SIZE);
             this.batchSize = batchSize < 200 || batchSize > 500 ? 200 : batchSize;
             blockFieldsMap = new HashMap<>();
         }
