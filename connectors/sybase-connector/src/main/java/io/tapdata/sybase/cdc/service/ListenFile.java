@@ -100,7 +100,7 @@ public class ListenFile implements CdcStep<CdcRoot> {
         this.tables = tables;
         root.getContext().getLog().info("init with monitor table: {}", tables);
         analyseRecord = new AnalyseTapEventFromCsvString();
-        this.batchSize = batchSize < 200 || batchSize > 500 ? 200 : batchSize;
+        this.batchSize = batchSize < 200 || batchSize > 1000 ? 1000 : batchSize;
         this.schemaConfigPath = root.getSybasePocPath() + ConfigPaths.SCHEMA_CONFIG_PATH;
         this.config = root.getConnectionConfig();
         this.nodeConfig = root.getNodeConfig();
@@ -176,8 +176,8 @@ public class ListenFile implements CdcStep<CdcRoot> {
                 }
             }
 
-            this.futureCheckFile = this.scheduledExecutorServiceCheckFile.scheduleWithFixedDelay(() -> listener.foreachYaml(false), 0, 2, TimeUnit.SECONDS);
-            this.futureReadFile = this.scheduledExecutorService.scheduleWithFixedDelay(() -> listener.readFile(), 2, 1, TimeUnit.SECONDS);
+            this.futureCheckFile = this.scheduledExecutorServiceCheckFile.scheduleWithFixedDelay(() -> listener.foreachYaml(false), 0, 3, TimeUnit.SECONDS);
+            this.futureReadFile = this.scheduledExecutorService.scheduleWithFixedDelay(() -> listener.readFile(), 2, 3, TimeUnit.SECONDS);
             //fileMonitor.start();
         } catch (Throwable e) {
             onStop();
