@@ -78,6 +78,8 @@ public class ListenFile implements CdcStep<CdcRoot> {
     Map<String, TapTable> tapTableMap = new HashMap<>();
 
     private final ReadFilter readFilter;
+    
+    private final int readcsvDelay;
 
     protected ListenFile(CdcRoot root,
                          String monitorPath,
@@ -100,7 +102,6 @@ public class ListenFile implements CdcStep<CdcRoot> {
         this.tables = tables;
         root.getContext().getLog().info("init with monitor table: {}", tables);
         analyseRecord = new AnalyseTapEventFromCsvString();
-        this.batchSize = batchSize < 200 || batchSize > 1000 ? 1000 : batchSize;
         this.schemaConfigPath = root.getSybasePocPath() + ConfigPaths.SCHEMA_CONFIG_PATH;
         this.config = root.getConnectionConfig();
         this.nodeConfig = root.getNodeConfig();
@@ -109,6 +110,8 @@ public class ListenFile implements CdcStep<CdcRoot> {
         monitorFilePathQueues = new ConcurrentLinkedQueue<>();
         scheduledExecutorService = Executors.newSingleThreadScheduledExecutor();
         if (ReadFilter.LOG_CDC_QUERY_READ_SOURCE == nodeConfig.getLogCdcQuery()) {
+            this.batchSize = batchSize < 200 || batchSize > 1000 ? 1000 : batchSize;
+            this.readcsvDelay = 3;
             blockFieldsMap = Optional.ofNullable(root.getExistsBlockFieldsMap()).orElse(ConnectorUtil.tableBlockFieldsFromFilterYaml(root.getSybasePocPath(), root.getContext()));
             int times = 3;
             while (root.getIsAlive().test(null)){
@@ -127,6 +130,8 @@ public class ListenFile implements CdcStep<CdcRoot> {
                 }
             }
         } else {
+            this.readcsvDelay = 1;
+            this.batchSize = batchSize < 200 || batchSize > 500 ? 200 : batchSize;
             blockFieldsMap = new HashMap<>();
         }
         readFilter = ReadFilter.stage(Optional.ofNullable(nodeConfig.getLogCdcQuery()).orElse(ReadFilter.LOG_CDC_QUERY_READ_LOG), root);
@@ -176,8 +181,8 @@ public class ListenFile implements CdcStep<CdcRoot> {
                 }
             }
 
-            this.futureCheckFile = this.scheduledExecutorServiceCheckFile.scheduleWithFixedDelay(() -> listener.foreachYaml(false), 0, 3, TimeUnit.SECONDS);
-            this.futureReadFile = this.scheduledExecutorService.scheduleWithFixedDelay(() -> listener.readFile(), 2, 3, TimeUnit.SECONDS);
+            this.futureCheckFile = this.scheduledExecutorServiceCheckFile.scheduleWithFixedDelay(() -> listener.foreachYaml(false), 0, readcsvDelay, TimeUnit.SECONDS);
+            this.futureReadFile = this.scheduledExecutorService.scheduleWithFixedDelay(() -> listener.readFile(), 2, readcsvDelay, TimeUnit.SECONDS);
             //fileMonitor.start();
         } catch (Throwable e) {
             onStop();
