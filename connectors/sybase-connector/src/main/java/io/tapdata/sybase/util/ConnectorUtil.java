@@ -682,7 +682,7 @@ public class ConnectorUtil {
 
     public static Map<String, Map<String, List<String>>> filterAppendTable(Map<String, Map<String, List<String>>> ago, Map<String, Map<String, List<String>>> now) {
         if (null == now || now.isEmpty()) return null;
-        if (null == ago || ago.isEmpty()) return now;
+        if (null == ago) ago = new HashMap();
         Map<String, Map<String, List<String>>> appendTab = new HashMap<>();
         int appendCount = 0;
         for (Map.Entry<String, Map<String, List<String>>> tabInfo : now.entrySet()) {
@@ -695,7 +695,6 @@ public class ConnectorUtil {
                 continue;
             }
             Map<String, List<String>> appendSchema = new HashMap<>();
-            appendTab.put(database, appendSchema);
             for (Map.Entry<String, List<String>> schemaNow : schemaTab.entrySet()) {
                 String schema = schemaNow.getKey();
                 List<String> tabNow = schemaNow.getValue();
@@ -718,10 +717,23 @@ public class ConnectorUtil {
                     appendSchema.put(schema, new ArrayList<>(appendTableSet));
                 }
             }
+            if(!appendSchema.isEmpty()) {
+                appendTab.put(database, appendSchema);
+            }
         }
         return appendCount > 0 ? appendTab : null;
     }
 
+    public static class FilterAppendTableEntity {
+        int filterCount;
+        Map<String, Map<String, List<String>>> tables;
+        public static FilterAppendTableEntity create(int filterCount, Map<String, Map<String, List<String>>> tables) {
+            FilterAppendTableEntity t = new FilterAppendTableEntity();
+            t.filterCount = filterCount;
+            t.tables = tables;
+            return t;
+        }
+    }
 
     public static void createFile(String path, String fileName, Log log) {
         if (null == fileName || "".equals(fileName.trim())) return;
@@ -792,16 +804,19 @@ public class ConnectorUtil {
                 }
             });
         });
+        context.getLog().debug("Table from filter.yaml: {}", tables);
         return tables;
     }
 
     public static List<Map<String, Object>> tableConfigFromFilterYaml(String pocPath, TapConnectorContext context) {
         // data/tapdata/tapdata/sybase-poc-temp/101.33.247.59:15001:testdb/sybase-poc/config/sybase2csv/filter_sybasease.yaml
-        String path = String.format("%s%s/sybase-poc/config/sybase2csv/filter_sybasease.yaml", (pocPath.endsWith("/") ? pocPath : pocPath + "/"), ConnectorUtil.getCurrentInstanceHostPortFromConfig(context));
+        String path = String.format("sybase-poc-temp/%s/sybase-poc/config/sybase2csv/filter_sybasease.yaml", ConnectorUtil.getCurrentInstanceHostPortFromConfig(context));
+        context.getLog().debug("Get table config from filter yaml: {}", path);
         try {
             YamlUtil filterYaml = new YamlUtil(path);
             return (List<Map<String, Object>>) filterYaml.get(SybaseFilterConfig.configKey);
         } catch (Exception e) {
+            context.getLog().debug("Get table config from filter yaml failed: {}", e.getMessage());
             return null;
         }
     }

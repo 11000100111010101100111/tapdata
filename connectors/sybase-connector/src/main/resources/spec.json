@@ -250,7 +250,7 @@
           "title": "${heartbeat}",
           "x-decorator": "FormItem",
           "x-component": "Switch",
-          "default": false,
+          "default": true,
           "x-index": 1,
           "x-decorator-props": {
             "tooltip": "${heartbeat_tip}"
@@ -536,7 +536,7 @@
       "byteRatio": 1
     },
     "tinytext[($byte)]": {
-      "to": "TapBinary",
+      "to": "TapString",
       "byte": 255,
       "pkEnablement": false
     },
@@ -546,22 +546,22 @@
       "pkEnablement": false
     },
     "unitext[($byte)]": {
-      "to": "TapBinary",
+      "to": "TapString",
       "byte": 255,
       "pkEnablement": false
     },
     "text[($byte)]": {
-      "to": "TapBinary",
+      "to": "TapString",
       "byte": "64k",
       "pkEnablement": false
     },
     "mediumtext[($byte)]": {
-      "to": "TapBinary",
+      "to": "TapString",
       "byte": "16m",
       "pkEnablement": false
     },
     "longtext[($byte)]": {
-      "to": "TapBinary",
+      "to": "TapString",
       "byte": "4g",
       "pkEnablement": false
     },

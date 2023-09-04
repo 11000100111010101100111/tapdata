@@ -30,16 +30,16 @@ public class NodeConfig {
 
     public NodeConfig(DataMap nodeConfig) {
         if (null == nodeConfig) nodeConfig = new DataMap();
-        this.fetchInterval = Optional.ofNullable(nodeConfig.getInteger("fetchInterval")).orElse(1);
-        if (this.fetchInterval < 1) {
-            this.fetchInterval = 1;
+        this.fetchInterval = Optional.ofNullable(nodeConfig.getInteger("fetchInterval")).orElse(3);
+        if (this.fetchInterval < 3) {
+            this.fetchInterval = 3;
         }
         this.outDecode = Optional.ofNullable(nodeConfig.getString("outDecode")).orElse("utf-8");
         encode = Optional.ofNullable(nodeConfig.getString("encode")).orElse("cp850");
         decode = Optional.ofNullable(nodeConfig.getString("decode")).orElse("big5-ha");
         autoEncode = (boolean)Optional.ofNullable(nodeConfig.get("autoEncode")).orElse(true);
         cdcCacheTime = Optional.ofNullable(nodeConfig.getInteger("cdcCacheTime")).orElse(3);
-        heartbeat = (Boolean) Optional.ofNullable(nodeConfig.get("heartbeat")).orElse(false);
+        heartbeat = (Boolean) Optional.ofNullable(nodeConfig.get("heartbeat")).orElse(true);
         hbDatabase = Optional.ofNullable(nodeConfig.getString("hbDatabase")).orElse("");
         hbSchema = Optional.ofNullable(nodeConfig.getString("hbSchema")).orElse("");
         if (cdcCacheTime < 1) {

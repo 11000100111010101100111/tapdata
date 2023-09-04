@@ -273,8 +273,20 @@ public class CdcHandle {
         }
         //命令结束后，写入filter.yaml
         try {
-            Thread.sleep(500);
-        }catch (Exception ignore) {}
+            Thread.sleep(30000);
+        }catch (Exception ignore) {} finally {
+            String hostPortFromConfig = ConnectorUtil.getCurrentInstanceHostPortFromConfig(context);
+            String[] killShellCmd = ConnectorUtil.getKillShellCmd(context);
+            List<Integer> port = ConnectorUtil.port(
+                    killShellCmd,
+                    ConnectorUtil.ignoreShells,
+                    root.getContext().getLog(),
+                    hostPortFromConfig
+            );
+            if (!port.isEmpty()) {
+                ConnectorUtil.safeStopShell(context);
+            }
+        }
         //重启任务
         new ExecCommand(root, CommandType.CDC, OverwriteType.RESUME).compile();
         return sybaseFilter;
