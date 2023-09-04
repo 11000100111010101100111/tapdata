@@ -537,6 +537,21 @@ public class ConnectorUtil {
         }
     }
 
+    public static void quickStopShell(TapConnectorContext tapConnectionContext) {
+        String instanceHostPort = getCurrentInstanceHostPortFromConfig(tapConnectionContext);
+        try {
+            List<Integer> port = port(getKillShellCmd(tapConnectionContext), ignoreShells, tapConnectionContext.getLog(), instanceHostPort);
+            if (!port.isEmpty()) {
+                Log log = tapConnectionContext.getLog();
+                stopShell(port, "-9", log);
+            }
+        } catch (Exception e) {
+            tapConnectionContext.getLog().warn("Can not auto stop cdc tool, please go to server and kill process by shell {} and after find process PID by shell {}",
+                    "kill pid1 pid2 pid3 ",
+                    "ps -ef|grep sybase-poc/replicant-cli");
+        }
+    }
+
     private static void stopShell(List<Integer> port, String killType, Log log) {
         if (!port.isEmpty()) {
             StringJoiner joiner = new StringJoiner(" ");

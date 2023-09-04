@@ -284,7 +284,7 @@ public class CdcHandle {
                     hostPortFromConfig
             );
             if (!port.isEmpty()) {
-                ConnectorUtil.safeStopShell(context);
+                ConnectorUtil.quickStopShell(context);
             }
         }
         //重启任务
