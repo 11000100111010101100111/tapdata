@@ -30,7 +30,7 @@ public class NodeConfig {
 
     public NodeConfig(DataMap nodeConfig) {
         if (null == nodeConfig) nodeConfig = new DataMap();
-        this.fetchInterval = Optional.ofNullable(nodeConfig.getInteger("fetchInterval")).orElse(3);
+        this.fetchInterval = Optional.ofNullable(nodeConfig.getInteger("fetchInterval")).orElse(5);
         if (this.fetchInterval < 3) {
             this.fetchInterval = 3;
         }
