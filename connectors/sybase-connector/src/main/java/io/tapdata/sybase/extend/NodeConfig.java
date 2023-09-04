@@ -31,8 +31,8 @@ public class NodeConfig {
     public NodeConfig(DataMap nodeConfig) {
         if (null == nodeConfig) nodeConfig = new DataMap();
         this.fetchInterval = Optional.ofNullable(nodeConfig.getInteger("fetchInterval")).orElse(5);
-        if (this.fetchInterval < 3) {
-            this.fetchInterval = 3;
+        if (this.fetchInterval < 5) {
+            this.fetchInterval = 5;
         }
         this.outDecode = Optional.ofNullable(nodeConfig.getString("outDecode")).orElse("utf-8");
         encode = Optional.ofNullable(nodeConfig.getString("encode")).orElse("cp850");
